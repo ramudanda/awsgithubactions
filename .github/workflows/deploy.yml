@@ -1,20 +1,52 @@
+name: Build and Push to ECR
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: cicd-app
+  AWS_ACCOUNT_ID: 319331104762   # 🔴 CHANGE THIS
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
-    permissions:
-      id-token: write
-      contents: read
-
     steps:
-    - name: Checkout
+    # 1️⃣ Checkout source code
+    - name: Checkout code
       uses: actions/checkout@v4
 
+    # 2️⃣ Configure AWS credentials using OIDC
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/github-actions-role
-        aws-region: us-east-1   # 👈 REQUIRED
+        role-to-assume: arn:aws:iam::319331104762:role/awsgithubactions   # 🔴 CHANGE THIS
+        aws-region: ${{ env.AWS_REGION }}
 
+    # 3️⃣ Verify AWS identity (debug / optional but recommended)
+    - name: Verify AWS identity
+      run: aws sts get-caller-identity
+
+    # 4️⃣ Login to Amazon ECR
     - name: Login to Amazon ECR
       uses: aws-actions/amazon-ecr-login@v2
+
+    # 5️⃣ Build, tag, and push Docker image
+    - name: Build and push Docker image
+      env:
+        IMAGE_TAG: ${{ github.run_number }}
+      run: |
+        ECR_URI=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}
+
+        docker build -t ${ECR_REPOSITORY}:${IMAGE_TAG} .
+        docker tag ${ECR_REPOSITORY}:${IMAGE_TAG} ${ECR_URI}:${IMAGE_TAG}
+        docker push ${ECR_URI}:${IMAGE_TAG}
+
+        echo "Image pushed: ${ECR_URI}:${IMAGE_TAG}"
